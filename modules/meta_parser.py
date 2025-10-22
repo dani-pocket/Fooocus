@@ -25,13 +25,50 @@ def load_parameter_button_click(raw_metadata: dict | str, is_generating: bool, i
         loaded_parameter_dict = json.loads(raw_metadata)
     assert isinstance(loaded_parameter_dict, dict)
 
+    # Backward compatibility: convert old 'performance' field to new format
+    performance_legacy = loaded_parameter_dict.get('performance', loaded_parameter_dict.get('Performance'))
+    if performance_legacy and performance_legacy in Performance.values():
+        perf_enum = Performance(performance_legacy)
+        config = perf_enum.get_preset_config()
+
+        # Map template name
+        template_map_reverse = {
+            Performance.QUALITY: 'Quality',
+            Performance.SPEED: 'Speed',
+            Performance.EXTREME_SPEED: 'Extreme Speed',
+            Performance.LIGHTNING: 'Lightning',
+            Performance.HYPER_SD: 'Hyper-SD'
+        }
+
+        # Only set if new fields don't exist (don't override explicit new values)
+        if 'performance_template' not in loaded_parameter_dict and 'Performance Template' not in loaded_parameter_dict:
+            loaded_parameter_dict['performance_template'] = template_map_reverse.get(perf_enum, 'Speed')
+        if 'sampling_steps' not in loaded_parameter_dict and 'Sampling Steps' not in loaded_parameter_dict:
+            loaded_parameter_dict['sampling_steps'] = config['steps']
+        if 'uov_steps' not in loaded_parameter_dict and 'UOV Steps' not in loaded_parameter_dict:
+            loaded_parameter_dict['uov_steps'] = config['uov_steps']
+        if 'performance_lora_enabled' not in loaded_parameter_dict and 'Performance LoRA Enabled' not in loaded_parameter_dict:
+            loaded_parameter_dict['performance_lora_enabled'] = config['performance_lora_enabled']
+        if 'performance_lora_type' not in loaded_parameter_dict and 'Performance LoRA Type' not in loaded_parameter_dict:
+            loaded_parameter_dict['performance_lora_type'] = config['performance_lora_type']
+        if 'performance_lora_weight' not in loaded_parameter_dict and 'Performance LoRA Weight' not in loaded_parameter_dict:
+            loaded_parameter_dict['performance_lora_weight'] = config['performance_lora_weight']
+
     results = [len(loaded_parameter_dict) > 0]
 
     get_image_number('image_number', 'Image Number', loaded_parameter_dict, results)
     get_str('prompt', 'Prompt', loaded_parameter_dict, results)
     get_str('negative_prompt', 'Negative Prompt', loaded_parameter_dict, results)
     get_list('styles', 'Styles', loaded_parameter_dict, results)
-    performance = get_str('performance', 'Performance', loaded_parameter_dict, results)
+
+    # New performance configuration (6 values instead of 1)
+    get_str('performance_template', 'Performance Template', loaded_parameter_dict, results)
+    get_number('sampling_steps', 'Sampling Steps', loaded_parameter_dict, results, cast_type=int)
+    get_number('uov_steps', 'UOV Steps', loaded_parameter_dict, results, cast_type=int)
+    get_bool('performance_lora_enabled', 'Performance LoRA Enabled', loaded_parameter_dict, results)
+    get_str('performance_lora_type', 'Performance LoRA Type', loaded_parameter_dict, results)
+    get_number('performance_lora_weight', 'Performance LoRA Weight', loaded_parameter_dict, results)
+
     get_steps('steps', 'Steps', loaded_parameter_dict, results)
     get_number('overwrite_switch', 'Overwrite Switch', loaded_parameter_dict, results)
     get_resolution('resolution', 'Resolution', loaded_parameter_dict, results)
@@ -62,9 +99,15 @@ def load_parameter_button_click(raw_metadata: dict | str, is_generating: bool, i
 
     # prevent performance LoRAs to be added twice, by performance and by lora
     performance_filename = None
-    if performance is not None and performance in Performance.values():
-        performance = Performance(performance)
-        performance_filename = performance.lora_filename()
+    performance_lora_type = loaded_parameter_dict.get('performance_lora_type', loaded_parameter_dict.get('Performance LoRA Type'))
+    if performance_lora_type and performance_lora_type != 'None':
+        # Map LoRA type to filename
+        lora_type_map = {
+            'LCM': 'sdxl_lcm_lora.safetensors',
+            'Lightning': 'sdxl_lightning_4step_lora.safetensors',
+            'Hyper-SD': 'sdxl_hyper_sd_4step_lora.safetensors'
+        }
+        performance_filename = lora_type_map.get(performance_lora_type)
 
     for i in range(modules.config.default_max_lora_number):
         get_lora(f'lora_combined_{i + 1}', f'LoRA {i + 1}', loaded_parameter_dict, results, performance_filename)
@@ -98,6 +141,15 @@ def get_number(key: str, fallback: str | None, source_dict: dict, results: list,
         h = source_dict.get(key, source_dict.get(fallback, default))
         assert h is not None
         h = cast_type(h)
+        results.append(h)
+    except:
+        results.append(gr.update())
+
+
+def get_bool(key: str, fallback: str | None, source_dict: dict, results: list, default=None):
+    try:
+        h = source_dict.get(key, source_dict.get(fallback, default))
+        assert isinstance(h, bool)
         results.append(h)
     except:
         results.append(gr.update())

@@ -31,8 +31,27 @@ class AsyncTask:
         self.negative_prompt = args.pop()
         self.style_selections = args.pop()
 
-        self.performance_selection = Performance(args.pop())
-        self.steps = self.performance_selection.steps()
+        # Performance configuration - now explicit instead of enum-based
+        self.performance_template = args.pop()  # For UI display only
+        self.sampling_steps = int(args.pop())
+        self.uov_steps = int(args.pop())
+        self.performance_lora_enabled = args.pop()
+        self.performance_lora_type = args.pop()
+        self.performance_lora_weight = float(args.pop())
+
+        # Legacy performance_selection for backward compatibility
+        # Map template name to Performance enum for metadata
+        template_to_performance = {
+            'Quality': Performance.QUALITY,
+            'Speed': Performance.SPEED,
+            'Extreme Speed': Performance.EXTREME_SPEED,
+            'Lightning': Performance.LIGHTNING,
+            'Hyper-SD': Performance.HYPER_SD,
+            'Manual': Performance.SPEED  # Default to Speed for manual mode
+        }
+        self.performance_selection = template_to_performance.get(self.performance_template, Performance.SPEED)
+
+        self.steps = self.sampling_steps
         self.original_steps = self.steps
 
         self.aspect_ratios_selection = args.pop()
@@ -857,7 +876,7 @@ def worker():
                 async_task.current_tab == 'ip' and async_task.mixing_image_prompt_and_vary_upscale)) \
                 and async_task.uov_method != flags.disabled.casefold() and async_task.uov_input_image is not None:
             async_task.uov_input_image, skip_prompt_processing, async_task.steps = prepare_upscale(
-                async_task, goals, async_task.uov_input_image, async_task.uov_method, async_task.performance_selection,
+                async_task, goals, async_task.uov_input_image, async_task.uov_method, async_task.uov_steps,
                 async_task.steps, 1, skip_prompt_processing=skip_prompt_processing)
         if (async_task.current_tab == 'inpaint' or (
                 async_task.current_tab == 'ip' and async_task.mixing_image_prompt_and_inpaint)) \
@@ -932,7 +951,7 @@ def worker():
             async_task.enhance_input_image = HWC3(async_task.enhance_input_image)
         return base_model_additional_loras, clip_vision_path, controlnet_canny_path, controlnet_cpds_path, inpaint_head_model_path, inpaint_image, inpaint_mask, ip_adapter_face_path, ip_adapter_path, ip_negative_path, skip_prompt_processing, use_synthetic_refiner
 
-    def prepare_upscale(async_task, goals, uov_input_image, uov_method, performance, steps, current_progress,
+    def prepare_upscale(async_task, goals, uov_input_image, uov_method, uov_steps, steps, current_progress,
                         advance_progress=False, skip_prompt_processing=False):
         uov_input_image = HWC3(uov_input_image)
         if 'vary' in uov_method:
@@ -943,7 +962,7 @@ def worker():
                 skip_prompt_processing = True
                 steps = 0
             else:
-                steps = performance.steps_uov()
+                steps = uov_steps
 
             if advance_progress:
                 current_progress += 1
@@ -1038,7 +1057,7 @@ def worker():
         current_progress = int(base_progress + (100 - preparation_steps) / float(all_steps) * (done_steps_upscaling + done_steps_inpainting))
         goals_enhance = []
         img, skip_prompt_processing, steps = prepare_upscale(
-            async_task, goals_enhance, img, async_task.enhance_uov_method, async_task.performance_selection,
+            async_task, goals_enhance, img, async_task.enhance_uov_method, async_task.uov_steps,
             enhance_steps, current_progress)
         steps, _, _, _ = apply_overrides(async_task, steps, height, width)
         exception_result = ''
@@ -1090,12 +1109,23 @@ def worker():
             async_task.refiner_model_name = 'None'
 
         current_progress = 0
-        if async_task.performance_selection == Performance.EXTREME_SPEED:
-            set_lcm_defaults(async_task, current_progress, advance_progress=True)
-        elif async_task.performance_selection == Performance.LIGHTNING:
-            set_lightning_defaults(async_task, current_progress, advance_progress=True)
-        elif async_task.performance_selection == Performance.HYPER_SD:
-            set_hyper_sd_defaults(async_task, current_progress, advance_progress=True)
+        # Load performance LoRA if enabled (user now controls this explicitly via UI)
+        if async_task.performance_lora_enabled and async_task.performance_lora_type != 'None':
+            lora_filename = None
+            lora_weight = async_task.performance_lora_weight
+
+            if async_task.performance_lora_type == 'LCM':
+                print(f'Performance LoRA: LCM @ {lora_weight}')
+                lora_filename = modules.config.downloading_sdxl_lcm_lora()
+            elif async_task.performance_lora_type == 'Lightning':
+                print(f'Performance LoRA: Lightning @ {lora_weight}')
+                lora_filename = modules.config.downloading_sdxl_lightning_lora()
+            elif async_task.performance_lora_type == 'Hyper-SD':
+                print(f'Performance LoRA: Hyper-SD @ {lora_weight}')
+                lora_filename = modules.config.downloading_sdxl_hyper_sd_lora()
+
+            if lora_filename:
+                async_task.performance_loras += [(lora_filename, lora_weight)]
 
         print(f'[Parameters] Adaptive CFG = {async_task.adaptive_cfg}')
         print(f'[Parameters] CLIP Skip = {async_task.clip_skip}')
@@ -1229,12 +1259,12 @@ def worker():
         all_steps = steps * async_task.image_number
 
         if async_task.enhance_checkbox and async_task.enhance_uov_method != flags.disabled.casefold():
-            enhance_upscale_steps = async_task.performance_selection.steps()
+            enhance_upscale_steps = async_task.sampling_steps
             if 'upscale' in async_task.enhance_uov_method:
                 if 'fast' in async_task.enhance_uov_method:
                     enhance_upscale_steps = 0
                 else:
-                    enhance_upscale_steps = async_task.performance_selection.steps_uov()
+                    enhance_upscale_steps = async_task.uov_steps
             enhance_upscale_steps, _, _, _ = apply_overrides(async_task, enhance_upscale_steps, height, width)
             enhance_upscale_steps_total = async_task.image_number * enhance_upscale_steps
             all_steps += enhance_upscale_steps_total

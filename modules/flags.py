@@ -189,3 +189,60 @@ class Performance(Enum):
 
     def lora_filename(self) -> str | None:
         return PerformanceLoRA[self.name].value if self.name in PerformanceLoRA.__members__ else None
+
+    def get_preset_config(self) -> dict:
+        """Returns dictionary of all settings for this performance preset"""
+        is_fast_mode = self.has_restricted_features(self)
+
+        config = {
+            'steps': self.steps(),
+            'uov_steps': self.steps_uov(),
+            'performance_lora_enabled': self.lora_filename() is not None,
+            'performance_lora_type': 'None',
+            'performance_lora_weight': 1.0,
+            'sampler_name': 'dpmpp_2m_sde_gpu',
+            'scheduler_name': 'karras',
+            'cfg_scale': 7.0,
+            'sharpness': 2.0,
+            'adaptive_cfg': 7.0,
+            'refiner_switch': 0.8,
+            'adm_scaler_positive': 1.5,
+            'adm_scaler_negative': 0.8,
+            'adm_scaler_end': 0.3,
+            'refiner_swap_method': 'joint',
+            'disable_intermediate_results': is_fast_mode
+        }
+
+        # Set performance LoRA type and weight
+        if self == Performance.EXTREME_SPEED:
+            config['performance_lora_type'] = 'LCM'
+            config['performance_lora_weight'] = 1.0
+        elif self == Performance.LIGHTNING:
+            config['performance_lora_type'] = 'Lightning'
+            config['performance_lora_weight'] = 1.0
+        elif self == Performance.HYPER_SD:
+            config['performance_lora_type'] = 'Hyper-SD'
+            config['performance_lora_weight'] = 0.8
+
+        # Override settings for fast modes
+        if is_fast_mode:
+            config['cfg_scale'] = 1.0
+            config['sharpness'] = 0.0
+            config['adaptive_cfg'] = 1.0
+            config['refiner_switch'] = 1.0
+            config['adm_scaler_positive'] = 1.0
+            config['adm_scaler_negative'] = 1.0
+            config['adm_scaler_end'] = 0.0
+
+            # Set specific sampler/scheduler for each fast mode
+            if self == Performance.EXTREME_SPEED:
+                config['sampler_name'] = 'lcm'
+                config['scheduler_name'] = 'lcm'
+            elif self == Performance.LIGHTNING:
+                config['sampler_name'] = 'euler'
+                config['scheduler_name'] = 'sgm_uniform'
+            elif self == Performance.HYPER_SD:
+                config['sampler_name'] = 'dpmpp_sde_gpu'
+                config['scheduler_name'] = 'karras'
+
+        return config
