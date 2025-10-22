@@ -225,7 +225,9 @@ def get_previewer(model):
     global VAE_approx_models
 
     from modules.config import path_vae_approx
+    # Determine which VAE approximation model to use based on latent format
     is_sdxl = isinstance(model.model.latent_format, ldm_patched.modules.latent_formats.SDXL)
+    # SD1.5 and SD2.0 both use SD15 latent format, so they use the same VAE approx
     vae_approx_filename = os.path.join(path_vae_approx, 'xlvaeapp.pth' if is_sdxl else 'vaeapp_sd15.pth')
 
     if vae_approx_filename in VAE_approx_models:

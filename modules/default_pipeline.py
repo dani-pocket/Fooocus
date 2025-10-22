@@ -45,14 +45,61 @@ def refresh_controlnets(model_paths):
 
 @torch.no_grad()
 @torch.inference_mode()
+def get_model_architecture():
+    """
+    Detect the architecture of the currently loaded model.
+    Returns: 'sd15', 'sd20', 'sdxl', 'sdxl_refiner', or 'unknown'
+    """
+    if model_base.unet is None:
+        return 'unknown'
+
+    model = model_base.unet_with_lora.model
+
+    # Check model type by class
+    from ldm_patched.modules.supported_models import SD15, SD20, SDXL, SDXLRefiner
+
+    if isinstance(model, SDXLRefiner):
+        return 'sdxl_refiner'
+    elif isinstance(model, SDXL):
+        return 'sdxl'
+    elif isinstance(model, SD20):
+        return 'sd20'
+    elif isinstance(model, SD15):
+        return 'sd15'
+
+    # Fallback: check by latent format
+    import ldm_patched.modules.latent_formats
+    if isinstance(model.latent_format, ldm_patched.modules.latent_formats.SDXL):
+        return 'sdxl'
+    elif isinstance(model.latent_format, ldm_patched.modules.latent_formats.SD15):
+        # SD1.5 and SD2.0 both use SD15 latent format, differentiate by context_dim
+        if hasattr(model.model_config, 'unet_config'):
+            context_dim = model.model_config.unet_config.get('context_dim', 768)
+            if context_dim == 1024:
+                return 'sd20'
+            else:
+                return 'sd15'
+        return 'sd15'
+
+    return 'unknown'
+
+
+@torch.no_grad()
+@torch.inference_mode()
 def assert_model_integrity():
-    error_message = None
+    """
+    Validate model integrity and print architecture information.
+    Now supports SD1.5, SD2.0, SDXL, and SDXL Refiner.
+    """
+    architecture = get_model_architecture()
+    print(f'[Model Architecture] Detected: {architecture.upper()}')
 
-    if not isinstance(model_base.unet_with_lora.model, SDXL):
-        error_message = 'You have selected base model other than SDXL. This is not supported yet.'
-
-    if error_message is not None:
-        raise NotImplementedError(error_message)
+    # Warn about feature availability
+    if architecture in ['sd15', 'sd20']:
+        print('[Model Features] ADM guidance disabled (SDXL-only feature)')
+        print('[Model Features] Refiner disabled (SDXL-only feature)')
+    elif architecture == 'sdxl_refiner':
+        print('[Model Features] Running in Refiner-only mode')
 
     return True
 
@@ -339,7 +386,15 @@ def process_diffusion(positive_cond, negative_cond, steps, switch, width, height
 
     assert refiner_swap_method in ['joint', 'separate', 'vae']
 
-    if final_refiner_vae is not None and final_refiner_unet is not None:
+    # Refiner is only supported for SDXL models
+    architecture = get_model_architecture()
+    if architecture not in ['sdxl', 'sdxl_refiner']:
+        # Disable refiner for non-SDXL models
+        target_refiner_unet = None
+        target_refiner_vae = None
+        print(f'[Sampler] Refiner disabled for {architecture.upper()} architecture (SDXL-only feature)')
+
+    if final_refiner_vae is not None and final_refiner_unet is not None and architecture in ['sdxl', 'sdxl_refiner']:
         # Refiner Use Different VAE (then it is SD15)
         if denoise > 0.9:
             refiner_swap_method = 'vae'
