@@ -563,10 +563,205 @@ with shared.gradio_root:
                                                    value=args_manager.args.preset if args_manager.args.preset else "initial",
                                                    interactive=True)
 
-                performance_selection = gr.Radio(label='Performance',
-                                                 choices=flags.Performance.values(),
-                                                 value=modules.config.default_performance,
-                                                 elem_classes=['performance_selection'])
+                # Performance Configuration - Explicit Manual Control
+                with gr.Accordion(label='Performance Configuration', open=True, elem_id='performance_accordion'):
+                    performance_template = gr.Dropdown(
+                        label='Performance Template',
+                        choices=['Manual', 'Quality', 'Speed', 'Extreme Speed', 'Lightning', 'Hyper-SD'],
+                        value=modules.config.default_performance_template,
+                        info='Select preset to auto-fill settings below, or use Manual for full control'
+                    )
+
+                    with gr.Group():
+                        gr.HTML('<b>Sampling</b>')
+                        sampling_steps = gr.Slider(
+                            label='Steps',
+                            minimum=1,
+                            maximum=200,
+                            step=1,
+                            value=modules.config.default_sampling_steps,
+                            info='Number of diffusion sampling steps'
+                        )
+                        uov_steps = gr.Slider(
+                            label='UOV Steps',
+                            minimum=1,
+                            maximum=200,
+                            step=1,
+                            value=modules.config.default_uov_steps,
+                            info='Steps for Upscale or Variation operations'
+                        )
+                        with gr.Row():
+                            sampler_name = gr.Dropdown(
+                                label='Sampler',
+                                choices=flags.sampler_list,
+                                value=modules.config.default_sampler,
+                                scale=1
+                            )
+                            scheduler_name = gr.Dropdown(
+                                label='Scheduler',
+                                choices=flags.scheduler_list,
+                                value=modules.config.default_scheduler,
+                                scale=1
+                            )
+
+                    with gr.Group():
+                        gr.HTML('<b>Performance LoRA</b>')
+                        with gr.Row():
+                            performance_lora_enabled = gr.Checkbox(
+                                label='Enable',
+                                value=modules.config.default_performance_lora_enabled,
+                                scale=1
+                            )
+                            performance_lora_type = gr.Dropdown(
+                                label='Type',
+                                choices=['None', 'LCM', 'Lightning', 'Hyper-SD'],
+                                value=modules.config.default_performance_lora_type,
+                                scale=2
+                            )
+                        performance_lora_weight = gr.Slider(
+                            label='Weight',
+                            minimum=0.0,
+                            maximum=2.0,
+                            step=0.01,
+                            value=modules.config.default_performance_lora_weight,
+                            visible=modules.config.default_performance_lora_enabled,
+                            info='LoRA strength (0.8-1.0 typical)'
+                        )
+
+                    with gr.Group():
+                        gr.HTML('<b>Guidance & Refinement</b>')
+                        guidance_scale = gr.Slider(
+                            label='CFG Scale',
+                            minimum=1.0,
+                            maximum=30.0,
+                            step=0.01,
+                            value=modules.config.default_cfg_scale,
+                            info='Higher value = cleaner, more vivid, more artistic style'
+                        )
+                        adaptive_cfg = gr.Slider(
+                            label='Adaptive CFG (TSNR)',
+                            minimum=1.0,
+                            maximum=30.0,
+                            step=0.01,
+                            value=modules.config.default_cfg_tsnr,
+                            info='CFG mimicking from TSNR (effective when real CFG > mimicked CFG)'
+                        )
+                        refiner_switch = gr.Slider(
+                            label='Refiner Switch At',
+                            minimum=0.1,
+                            maximum=1.0,
+                            step=0.0001,
+                            value=modules.config.default_refiner_switch,
+                            info='When to switch from base to refiner (0.8 typical for SDXL)'
+                        )
+                        sharpness = gr.Slider(
+                            label='Sharpness',
+                            minimum=0.0,
+                            maximum=30.0,
+                            step=0.001,
+                            value=modules.config.default_sample_sharpness,
+                            info='Higher value = sharper image and textures'
+                        )
+
+                    with gr.Accordion(label='ADM Guidance (Advanced)', open=False):
+                        adm_scaler_positive = gr.Slider(
+                            label='Positive ADM Scale',
+                            minimum=0.1,
+                            maximum=3.0,
+                            step=0.001,
+                            value=modules.config.default_adm_scaler_positive,
+                            info='Scaler for positive ADM (1.0 = neutral, 1.5 = enhanced)'
+                        )
+                        adm_scaler_negative = gr.Slider(
+                            label='Negative ADM Scale',
+                            minimum=0.1,
+                            maximum=3.0,
+                            step=0.001,
+                            value=modules.config.default_adm_scaler_negative,
+                            info='Scaler for negative ADM (1.0 = neutral, 0.8 = reduced)'
+                        )
+                        adm_scaler_end = gr.Slider(
+                            label='ADM End At Step',
+                            minimum=0.0,
+                            maximum=1.0,
+                            step=0.001,
+                            value=modules.config.default_adm_scaler_end,
+                            info='When to end ADM guidance (0.0-1.0, fraction of total steps)'
+                        )
+
+                    with gr.Group():
+                        refiner_swap_method = gr.Dropdown(
+                            label='Refiner Swap Method',
+                            choices=['joint', 'separate', 'vae'],
+                            value=modules.config.default_refiner_swap_method,
+                            info='How to swap between base and refiner models'
+                        )
+                        disable_intermediate_results = gr.Checkbox(
+                            label='Disable Intermediate Results',
+                            value=modules.config.default_disable_intermediate_results,
+                            info='Only show final images (faster for fast modes)'
+                        )
+
+                    # Performance template change callback - auto-fill all settings
+                    def on_performance_template_change(template):
+                        if template == 'Manual':
+                            # Don't auto-fill, return current values (no update)
+                            return [gr.update()] * 16
+
+                        # Get preset config from Performance enum
+                        template_map = {
+                            'Quality': flags.Performance.QUALITY,
+                            'Speed': flags.Performance.SPEED,
+                            'Extreme Speed': flags.Performance.EXTREME_SPEED,
+                            'Lightning': flags.Performance.LIGHTNING,
+                            'Hyper-SD': flags.Performance.HYPER_SD
+                        }
+                        perf = template_map.get(template)
+                        if perf is None:
+                            return [gr.update()] * 16
+
+                        config = perf.get_preset_config()
+                        return [
+                            gr.update(value=config['steps']),  # sampling_steps
+                            gr.update(value=config['uov_steps']),  # uov_steps
+                            gr.update(value=config['sampler_name']),  # sampler_name
+                            gr.update(value=config['scheduler_name']),  # scheduler_name
+                            gr.update(value=config['performance_lora_enabled']),  # performance_lora_enabled
+                            gr.update(value=config['performance_lora_type']),  # performance_lora_type
+                            gr.update(value=config['performance_lora_weight']),  # performance_lora_weight
+                            gr.update(value=config['cfg_scale']),  # guidance_scale
+                            gr.update(value=config['adaptive_cfg']),  # adaptive_cfg
+                            gr.update(value=config['refiner_switch']),  # refiner_switch
+                            gr.update(value=config['sharpness']),  # sharpness
+                            gr.update(value=config['adm_scaler_positive']),  # adm_scaler_positive
+                            gr.update(value=config['adm_scaler_negative']),  # adm_scaler_negative
+                            gr.update(value=config['adm_scaler_end']),  # adm_scaler_end
+                            gr.update(value=config['refiner_swap_method']),  # refiner_swap_method
+                            gr.update(value=config['disable_intermediate_results']),  # disable_intermediate_results
+                        ]
+
+                    performance_template.change(
+                        on_performance_template_change,
+                        inputs=[performance_template],
+                        outputs=[
+                            sampling_steps, uov_steps, sampler_name, scheduler_name,
+                            performance_lora_enabled, performance_lora_type, performance_lora_weight,
+                            guidance_scale, adaptive_cfg, refiner_switch, sharpness,
+                            adm_scaler_positive, adm_scaler_negative, adm_scaler_end,
+                            refiner_swap_method, disable_intermediate_results
+                        ],
+                        queue=False,
+                        show_progress=False
+                    )
+
+                    # LoRA weight visibility toggle
+                    performance_lora_enabled.change(
+                        lambda x: gr.update(visible=x),
+                        inputs=[performance_lora_enabled],
+                        outputs=[performance_lora_weight],
+                        queue=False,
+                        show_progress=False
+                    )
 
                 with gr.Accordion(label='Aspect Ratios', open=False, elem_id='aspect_ratios_accordion') as aspect_ratios_accordion:
                     aspect_ratios_selection = gr.Radio(label='Aspect Ratios', show_label=False,
@@ -753,8 +948,10 @@ with shared.gradio_root:
                         disable_preview = gr.Checkbox(label='Disable Preview', value=modules.config.default_black_out_nsfw,
                                                       interactive=not modules.config.default_black_out_nsfw,
                                                       info='Disable preview during generation.')
-                        disable_intermediate_results = gr.Checkbox(label='Disable Intermediate Results',
-                                                      value=flags.Performance.has_restricted_features(modules.config.default_performance),
+                        # Note: This is a duplicate - same control is in Performance Configuration section
+                        # Keeping it here for backward compatibility / alternative access
+                        disable_intermediate_results_debug = gr.Checkbox(label='Disable Intermediate Results',
+                                                      value=modules.config.default_disable_intermediate_results,
                                                       info='Disable intermediate results during generation, only show final gallery.')
 
                         disable_seed_increment = gr.Checkbox(label='Disable seed increment',
@@ -889,7 +1086,9 @@ with shared.gradio_root:
         state_is_generating = gr.State(False)
 
         load_data_outputs = [advanced_checkbox, image_number, prompt, negative_prompt, style_selections,
-                             performance_selection, overwrite_step, overwrite_switch, aspect_ratios_selection,
+                             performance_template, sampling_steps, uov_steps, performance_lora_enabled,
+                             performance_lora_type, performance_lora_weight,
+                             overwrite_step, overwrite_switch, aspect_ratios_selection,
                              overwrite_width, overwrite_height, guidance_scale, sharpness, adm_scaler_positive,
                              adm_scaler_negative, adm_scaler_end, refiner_swap_method, adaptive_cfg, clip_skip,
                              base_model, refiner_model, refiner_switch, sampler_name, scheduler_name, vae_name,
@@ -937,15 +1136,7 @@ with shared.gradio_root:
                 .then(lambda: None, _js='()=>{refresh_style_localization();}') \
                 .then(inpaint_engine_state_change, inputs=[inpaint_engine_state] + enhance_inpaint_mode_ctrls, outputs=enhance_inpaint_engine_ctrls, queue=False, show_progress=False)
 
-        performance_selection.change(lambda x: [gr.update(interactive=not flags.Performance.has_restricted_features(x))] * 11 +
-                                               [gr.update(visible=not flags.Performance.has_restricted_features(x))] * 1 +
-                                               [gr.update(value=flags.Performance.has_restricted_features(x))] * 1,
-                                     inputs=performance_selection,
-                                     outputs=[
-                                         guidance_scale, sharpness, adm_scaler_end, adm_scaler_positive,
-                                         adm_scaler_negative, refiner_switch, refiner_model, sampler_name,
-                                         scheduler_name, adaptive_cfg, refiner_swap_method, negative_prompt, disable_intermediate_results
-                                     ], queue=False, show_progress=False)
+        # UI lockout callback removed - all controls now always interactive for manual control
 
         output_format.input(lambda x: gr.update(output_format=x), inputs=output_format)
 
@@ -977,7 +1168,9 @@ with shared.gradio_root:
         ctrls = [currentTask, generate_image_grid]
         ctrls += [
             prompt, negative_prompt, style_selections,
-            performance_selection, aspect_ratios_selection, image_number, output_format, image_seed,
+            performance_template, sampling_steps, uov_steps, performance_lora_enabled,
+            performance_lora_type, performance_lora_weight,
+            aspect_ratios_selection, image_number, output_format, image_seed,
             read_wildcards_in_order, sharpness, guidance_scale
         ]
 

@@ -403,6 +403,72 @@ default_performance = get_config_item_or_set_default(
     validator=lambda x: x in Performance.values(),
     expected_type=str
 )
+default_performance_template = get_config_item_or_set_default(
+    key='default_performance_template',
+    default_value='Speed',
+    validator=lambda x: x in ['Manual', 'Quality', 'Speed', 'Extreme Speed', 'Lightning', 'Hyper-SD'],
+    expected_type=str
+)
+default_sampling_steps = get_config_item_or_set_default(
+    key='default_sampling_steps',
+    default_value=30,
+    validator=lambda x: isinstance(x, int) and 1 <= x <= 200,
+    expected_type=int
+)
+default_uov_steps = get_config_item_or_set_default(
+    key='default_uov_steps',
+    default_value=18,
+    validator=lambda x: isinstance(x, int) and 1 <= x <= 200,
+    expected_type=int
+)
+default_performance_lora_enabled = get_config_item_or_set_default(
+    key='default_performance_lora_enabled',
+    default_value=False,
+    validator=lambda x: isinstance(x, bool),
+    expected_type=bool
+)
+default_performance_lora_type = get_config_item_or_set_default(
+    key='default_performance_lora_type',
+    default_value='None',
+    validator=lambda x: x in ['None', 'LCM', 'Lightning', 'Hyper-SD'],
+    expected_type=str
+)
+default_performance_lora_weight = get_config_item_or_set_default(
+    key='default_performance_lora_weight',
+    default_value=1.0,
+    validator=lambda x: isinstance(x, numbers.Number) and 0.0 <= x <= 2.0,
+    expected_type=numbers.Number
+)
+default_adm_scaler_positive = get_config_item_or_set_default(
+    key='default_adm_scaler_positive',
+    default_value=1.5,
+    validator=lambda x: isinstance(x, numbers.Number) and 0.1 <= x <= 3.0,
+    expected_type=numbers.Number
+)
+default_adm_scaler_negative = get_config_item_or_set_default(
+    key='default_adm_scaler_negative',
+    default_value=0.8,
+    validator=lambda x: isinstance(x, numbers.Number) and 0.1 <= x <= 3.0,
+    expected_type=numbers.Number
+)
+default_adm_scaler_end = get_config_item_or_set_default(
+    key='default_adm_scaler_end',
+    default_value=0.3,
+    validator=lambda x: isinstance(x, numbers.Number) and 0.0 <= x <= 1.0,
+    expected_type=numbers.Number
+)
+default_refiner_swap_method = get_config_item_or_set_default(
+    key='default_refiner_swap_method',
+    default_value='joint',
+    validator=lambda x: x in ['joint', 'separate', 'vae'],
+    expected_type=str
+)
+default_disable_intermediate_results = get_config_item_or_set_default(
+    key='default_disable_intermediate_results',
+    default_value=False,
+    validator=lambda x: isinstance(x, bool),
+    expected_type=bool
+)
 default_image_prompt_checkbox = get_config_item_or_set_default(
     key='default_image_prompt_checkbox',
     default_value=False,
@@ -738,7 +804,13 @@ possible_preset_keys = {
     "default_scheduler": "scheduler",
     "default_overwrite_step": "steps",
     "default_overwrite_switch": "overwrite_switch",
-    "default_performance": "performance",
+    "default_performance": "performance",  # Legacy - for backward compatibility
+    "default_performance_template": "performance_template",
+    "default_sampling_steps": "sampling_steps",
+    "default_uov_steps": "uov_steps",
+    "default_performance_lora_enabled": "performance_lora_enabled",
+    "default_performance_lora_type": "performance_lora_type",
+    "default_performance_lora_weight": "performance_lora_weight",
     "default_image_number": "image_number",
     "default_prompt": "prompt",
     "default_prompt_negative": "negative_prompt",
