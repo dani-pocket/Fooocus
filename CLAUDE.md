@@ -74,6 +74,39 @@ python -m unittest tests/
 - `--debug-mode`: Enable debug logging
 - `--disable-preset-selection`: Disable preset switching in UI
 
+## Supported Model Architectures
+
+Fooocus now supports multiple Stable Diffusion architectures with automatic detection:
+
+### Supported Architectures
+- **SD 1.5**: Original Stable Diffusion (768px base resolution, 4-channel latent)
+- **SD 2.0/2.1**: Improved Stable Diffusion (768px base resolution, OpenCLIP text encoder)
+- **SDXL**: Stable Diffusion XL (1024px base resolution, dual text encoders, ADM guidance)
+- **SDXL Refiner**: Specialized refiner model for SDXL
+
+### Architecture Detection
+The model architecture is automatically detected when loading a checkpoint via `get_model_architecture()` in `modules/default_pipeline.py`. Detection uses:
+1. Model class type (SD15, SD20, SDXL, SDXLRefiner)
+2. Latent format (SD15 vs SDXL)
+3. Context dimension (768 for SD1.5, 1024 for SD2.0)
+
+### Feature Availability by Architecture
+
+| Feature | SD 1.5 | SD 2.0 | SDXL | Notes |
+|---------|--------|--------|------|-------|
+| Basic Generation | ✅ | ✅ | ✅ | All architectures supported |
+| Prompt Expansion | ✅ | ✅ | ✅ | GPT-2 based, universal |
+| Sharpness | ✅ | ✅ | ✅ | Sampling-level feature |
+| CFG Scale | ✅ | ✅ | ✅ | Universal |
+| ADM Guidance | ❌ | ❌ | ✅ | SDXL-only (automatic) |
+| Refiner | ❌ | ❌ | ✅ | SDXL-only (automatic) |
+| LoRA | ✅ | ✅ | ✅ | Architecture-matched |
+| ControlNet | ✅ | ✅ | ✅ | Architecture-matched |
+| Inpaint | ✅ | ✅ | ✅ | Custom algorithm |
+| Upscale | ✅ | ✅ | ✅ | Universal |
+
+Architecture-specific features are automatically enabled/disabled based on the loaded model.
+
 ## Architecture Overview
 
 ### High-Level Structure
